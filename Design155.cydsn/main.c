@@ -30,6 +30,8 @@ int main()
     
     /* Start USBFS device 0 with 3V operation */
     USBFS_Start(0u, USBFS_3V_OPERATION); 
+    
+    LCD_Start();                                // LCDの初期化
 
     for (;;) {
         // 初期化終了まで待機
@@ -53,8 +55,14 @@ int main()
             
             // OUTパケットの到着待ち
             if (USBFS_GetEPState(ENDPOINT_OUT) & USBFS_OUT_BUFFER_FULL) {
+                uint8 i;
                 uint16 len = USBFS_GetEPCount(ENDPOINT_OUT);
                 USBFS_ReadOutEP(ENDPOINT_OUT, dataOut, len);
+                LCD_Position(0, 0);
+                for (i = 0; i < 8; i++) {
+                    LCD_PrintInt8(dataOut[i]);
+                }
+                LCD_PutChar(' ');
             }
         }
     }
