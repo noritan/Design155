@@ -31,21 +31,32 @@ int main()
     /* Start USBFS device 0 with 3V operation */
     USBFS_Start(0u, USBFS_3V_OPERATION); 
 
-    /* Wait for Device to enumerate */
-    while(!USBFS_GetConfiguration());
+    for (;;) {
+        // 初期化終了まで待機
+        while (USBFS_GetConfiguration() == 0);
+        
+        USBFS_IsConfigurationChanged();         // CHANGEフラグを確実にクリアする
+        
+        USBFS_EnableOutEP(ENDPOINT_OUT);        // OUTエンドポイントを起動する
 
-    /* Enumeration is done, load endpoint 1. Do not toggle the first time. */
-    USBFS_LoadInEP(ENDPOINT_IN, dataIn, DATA_LEN);
-    
-    while(1)
-    {
-        /* Wait for ACK before loading data */
-        while(!USBFS_GetEPAckState(ENDPOINT_IN));
-        
-        /* ACK has occurred, load the endpoint and toggle the data bit */
-        USBFS_LoadInEP(ENDPOINT_IN, dataIn, DATA_LEN);
-        
-        counter++;
+        for (;;) {
+            // 設定が変更されたら、再初期化を行う
+            if (USBFS_IsConfigurationChanged()) {
+                break;
+            }
+            
+            // INパケットの送出待ち
+            if (USBFS_GetEPState(ENDPOINT_IN) & USBFS_IN_BUFFER_EMPTY) {        
+                // INパケットを送り出す
+                USBFS_LoadInEP(ENDPOINT_IN, dataIn, DATA_LEN);
+            }
+            
+            // OUTパケットの到着待ち
+            if (USBFS_GetEPState(ENDPOINT_OUT) & USBFS_OUT_BUFFER_FULL) {
+                uint16 len = USBFS_GetEPCount(ENDPOINT_OUT);
+                USBFS_ReadOutEP(ENDPOINT_OUT, dataOut, len);
+            }
+        }
     }
 }
 
