@@ -46,6 +46,9 @@
 //    10 : 50kHz
 //
 #define     CONFIG_SPEED        (0x0cu)
+#define     CONFIG_100K         (0x00u)
+#define     CONFIG_400K         (0x04u)
+#define     CONFIG_50K          (0x08u)
 
 //  Length part
 //
@@ -55,6 +58,7 @@
 //    | +-------------- Burst Repeat
 //    +---------------- Burst Multiple
 //
+#define     LONG_LENGTH         (0x3fu)
 
 //  Command part
 //
@@ -63,6 +67,8 @@
 //    | +-+-+-+-+-+-+-- Command code
 //    +---------------- Internal command
 //
+#define     COM_INTERNAL        (0x80u)
+#define     COM_STATUS          (0x80u)
 #define     COM_VERSION         (0x81u)
 
 //  Status code
@@ -72,10 +78,22 @@
 //    | | | | | | | +-- ACK
 //    | | | | | | +---- N/A
 //    | | | | | +------ VTARG
+//
+#define     STAT_ACK            (0x01u)
+#define     STAT_VTARG          (0x04u)
+
+//  Power code
+#define     POWER_NONE          (0x00u)
+#define     POWER_5p0V          (0x01u)
+#define     POWER_3p3V          (0x02u)
 
 // Buffer for endpoints
 uint8 dataIn[64] = {0};
 uint8 dataOut[64] = {0};
+
+uint8 inLength;
+uint8 i2cSpeed = CONFIG_400K;
+uint8 power = POWER_NONE;
 
 // Return value for command
 CYCODE const uint8 version[] = {0, 0, 0, 1, 0x01, 0x23, 0x00, 0xA5};
@@ -83,6 +101,11 @@ CYCODE const uint8 version[] = {0, 0, 0, 1, 0x01, 0x23, 0x00, 0xA5};
 uint8 parseCommand(uint16 len) {
     uint16 i;
     uint8 dataInIndex = 0;
+    uint8 control;
+    uint8 command;
+    
+    dataInIndex = 0;
+    dataIn[dataInIndex++] = 0;        // default status code
     
     LCD_Position(0, 0);
     for (i = 0; i < 8; i++) {
@@ -90,15 +113,53 @@ uint8 parseCommand(uint16 len) {
     }
     LCD_PutChar(' ');
     
-    if ((dataOut[0] == 0x02) && (dataOut[1] == 0x00) && (dataOut[2] == COM_VERSION)) {
-        // Get version
-        dataIn[dataInIndex++] = 5;
-        for (i = 0; i < sizeof version; i++) {
-            dataIn[dataInIndex++] = version[i];
+    control = dataOut[0];
+    inLength = dataOut[1] & LONG_LENGTH;
+    command = dataOut[2];
+    
+    if (control & CTRL_CONFIG) {
+        // Configuration command
+        i2cSpeed = control & CONFIG_SPEED;
+        dataIn[0] |= STAT_ACK;
+    } else if (control & CTRL_START) {
+        if (command & COM_INTERNAL) {
+            if (command == COM_STATUS) {
+                if (control & CTRL_RW) {
+                    // Return status code
+                    dataIn[1] = power;          // Power
+                    dataIn[2] = i2cSpeed;       // I2C speed
+                    dataIn[0] |= STAT_ACK;
+                } else {
+                    // Write control code
+                    power = dataOut[3];
+                    dataIn[0] |= STAT_ACK;
+                }
+            } else if (command == COM_VERSION) {
+                // Get version
+                for (i = 0; i < sizeof version; i++) {
+                    dataIn[dataInIndex++] = version[i];
+                }
+                dataIn[0] |= STAT_ACK;
+                if (power != POWER_NONE) {
+                    dataIn[0] |= STAT_VTARG;
+                }
+            } else {
+                LCD_Position(1, 0);
+                LCD_PrintString("UNK INT COM");
+                for (;;) ;
+            }
+        } else {
+            LCD_Position(1, 0);
+            LCD_PrintString("UNK EXT COM");
+            for (;;) ;
         }
-        while (!(USBFS_GetEPState(ENDPOINT_IN) & USBFS_IN_BUFFER_EMPTY));
-        USBFS_LoadInEP(ENDPOINT_IN, dataIn, DATA_LEN);
+    } else {
+        LCD_Position(1, 0);
+        LCD_PrintString("NO START");
+        for (;;) ;
     }
+    while (!(USBFS_GetEPState(ENDPOINT_IN) & USBFS_IN_BUFFER_EMPTY));
+    USBFS_LoadInEP(ENDPOINT_IN, dataIn, DATA_LEN);
     return 0;
 }
 
