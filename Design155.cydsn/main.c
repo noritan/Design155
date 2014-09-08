@@ -91,18 +91,27 @@
 uint8 dataIn[64] = {0};
 uint8 dataOut[64] = {0};
 
-uint8 inLength;
+uint8 dataLength;
 uint8 i2cSpeed = CONFIG_400K;
 uint8 power = POWER_NONE;
 
 // Return value for command
 CYCODE const uint8 version[] = {0, 0, 0, 1, 0x01, 0x23, 0x00, 0xA5};
 
+void stall(uint8 errorCode) {
+    LCD_Position(1, 0);
+    LCD_PrintString("ERROR=");
+    LCD_PrintHexUint8(errorCode);
+    for (;;) ;
+}
+
 uint8 parseCommand(uint16 len) {
     uint16 i;
     uint8 dataInIndex = 0;
+    uint8 dataOutIndex = 0;
     uint8 control;
     uint8 command;
+    uint8 errorCode;
     
     dataInIndex = 0;
     dataIn[dataInIndex++] = 0;        // default status code
@@ -114,7 +123,7 @@ uint8 parseCommand(uint16 len) {
     LCD_PutChar(' ');
     
     control = dataOut[0];
-    inLength = dataOut[1] & LONG_LENGTH;
+    dataLength = dataOut[1] & LONG_LENGTH;
     command = dataOut[2];
     
     if (control & CTRL_CONFIG) {
@@ -149,9 +158,62 @@ uint8 parseCommand(uint16 len) {
                 for (;;) ;
             }
         } else {
-            LCD_Position(1, 0);
-            LCD_PrintString("UNK EXT COM");
-            for (;;) ;
+            if (control & CTRL_RW) {
+                // READ operation
+                // START condition
+                errorCode = I2CM_MasterSendStart(dataOut[2], 1);
+                if (errorCode != I2CM_MSTR_NO_ERROR) {
+                    stall(errorCode);
+                }
+                // Body part
+                for (; dataLength > 1; dataLength--) {
+                    dataIn[dataInIndex++] = I2CM_MasterReadByte(1);
+                }
+                // Last byte
+                if (control & CTRL_STOP) {
+                    dataIn[dataInIndex++] = I2CM_MasterReadByte(0);
+                } else {
+                    dataIn[dataInIndex++] = I2CM_MasterReadByte(1);
+                }
+                // STOP condition
+                if (control & CTRL_STOP) {
+                    errorCode = I2CM_MasterSendStop();
+                    if (errorCode != I2CM_MSTR_NO_ERROR) {
+                        stall(errorCode);
+                    }
+                }
+                dataIn[0] |= STAT_ACK;
+                if (power != POWER_NONE) {
+                    dataIn[0] |= STAT_VTARG;
+                }
+            } else {
+                // WRITE operation
+                // START condition
+                errorCode = I2CM_MasterSendStart(dataOut[2], 0);
+                if (errorCode != I2CM_MSTR_NO_ERROR) {
+                    stall(errorCode);
+                }
+                // Body part
+                dataOutIndex = 3;
+                for (; dataLength > 0; dataLength--) {
+                    errorCode = I2CM_MasterWriteByte(dataOut[dataOutIndex++]);
+                    dataIn[dataInIndex++] = !errorCode;
+                    if (errorCode != I2CM_MSTR_NO_ERROR) {
+                        stall(errorCode);
+                    }
+                }
+                // STOP condition
+                if (control & CTRL_STOP) {
+                    errorCode = I2CM_MasterSendStop();
+                    if (errorCode != I2CM_MSTR_NO_ERROR) {
+                        stall(errorCode);
+                    }
+                }
+                dataIn[0] |= STAT_ACK;
+                if (power != POWER_NONE) {
+                    dataIn[0] |= STAT_VTARG;
+                }
+            }
         }
     } else {
         LCD_Position(1, 0);
@@ -169,6 +231,8 @@ int main()
     
     /* Enable Global Interrupts */
     CyGlobalIntEnable;
+    
+    I2CM_Start();
     
     /* Start USBFS device 0 with 3V operation */
     USBFS_Start(0u, USBFS_3V_OPERATION); 
