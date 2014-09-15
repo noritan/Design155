@@ -54,12 +54,6 @@
 //  Length part
 //
 //  dataOut[1] : Long
-//    7 6 5 4 3 2 1 0
-//    | | +-+-+-+-+-+-- Long
-//    | +-------------- Burst Repeat
-//    +---------------- Burst Multiple
-//
-#define     LONG_LENGTH         (0x3fu)
 
 //  Command part
 //
@@ -127,7 +121,7 @@ uint8 parseCommand(uint16 len) {
     dataLength = dataOut[1];
     if (dataLength > MAX_I2C_SIZE) {
         LCD_Position(1, 0);
-        LCD_PrintString("NO BURST");
+        LCD_PrintString("TOO LONG PACKET");
         for (;;) ;
     }
     command = dataOut[2];
