@@ -97,7 +97,7 @@ void stall(uint8 errorCode) {
     for (;;) ;
 }
 
-uint8 parseCommand(uint16 len) {
+uint8 parseCommand(void) {
     uint16 i;
     uint8 dataInIndex = 0;
     uint8 dataOutIndex = 0;
@@ -248,7 +248,7 @@ int main()
                 uint16 len = USBFS_GetEPCount(ENDPOINT_OUT);
                 USBFS_ReadOutEP(ENDPOINT_OUT, dataOut, len);
                 USBFS_EnableOutEP(ENDPOINT_OUT);        // OUTエンドポイントを起動する
-                if (parseCommand(len)) break;
+                if (parseCommand()) break;
             }
         }
     }
