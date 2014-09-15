@@ -22,16 +22,12 @@
 //    7 6 5 4 3 2 1 0
 //    | | | | | | | +-- R/W
 //    | | | | | | +---- START
-//    | | | | | +------ RESTART
 //    | | | | +-------- STOP
-//    | | | +---------- I2CRESTART
 //    | | +------------ CONFIG
 //
 #define     CTRL_RW             (0x01u)
 #define     CTRL_START          (0x02u)
-#define     CTRL_RESTART        (0x04u)
 #define     CTRL_STOP           (0x08u)
-#define     CTRL_I2CRESTART     (0x10u)
 #define     CTRL_CONFIG         (0x20u)
 
 //  CONFIGURATION COMMAND
@@ -71,7 +67,6 @@
 //  dataIn[0] : Status
 //    7 6 5 4 3 2 1 0
 //    | | | | | | | +-- ACK
-//    | | | | | | +---- N/A
 //    | | | | | +------ VTARG
 //
 #define     STAT_ACK            (0x01u)
