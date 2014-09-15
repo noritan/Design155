@@ -14,6 +14,7 @@
 #define ENDPOINT_OUT        (0x01u)
 #define ENDPOINT_IN         (0x02u)
 #define DATA_LEN            (0x40u)
+#define MAX_I2C_SIZE        (DATA_LEN-2)
 
 //  Generic Command
 //
@@ -123,6 +124,11 @@ uint8 parseCommand(uint16 len) {
     LCD_PutChar(' ');
     
     control = dataOut[0];
+    if (dataLength > MAX_I2C_SIZE) {
+        LCD_Position(1, 0);
+        LCD_PrintString("NO BURST");
+        for (;;) ;
+    }
     dataLength = dataOut[1] & LONG_LENGTH;
     command = dataOut[2];
     
