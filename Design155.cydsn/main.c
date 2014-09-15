@@ -124,12 +124,12 @@ uint8 parseCommand(uint16 len) {
     LCD_PutChar(' ');
     
     control = dataOut[0];
+    dataLength = dataOut[1];
     if (dataLength > MAX_I2C_SIZE) {
         LCD_Position(1, 0);
         LCD_PrintString("NO BURST");
         for (;;) ;
     }
-    dataLength = dataOut[1] & LONG_LENGTH;
     command = dataOut[2];
     
     if (control & CTRL_CONFIG) {
@@ -138,6 +138,7 @@ uint8 parseCommand(uint16 len) {
         dataIn[0] |= STAT_ACK;
     } else if (control & CTRL_START) {
         if (command & COM_INTERNAL) {
+            dataIn[0] |= STAT_VTARG;
             if (command == COM_STATUS) {
                 if (control & CTRL_RW) {
                     // Return status code
@@ -147,7 +148,7 @@ uint8 parseCommand(uint16 len) {
                 } else {
                     // Write control code
                     power = dataOut[3];
-                    dataIn[0] |= STAT_ACK;
+                    dataIn[0] = STAT_ACK;
                 }
             } else if (command == COM_VERSION) {
                 // Get version
@@ -155,9 +156,6 @@ uint8 parseCommand(uint16 len) {
                     dataIn[dataInIndex++] = version[i];
                 }
                 dataIn[0] |= STAT_ACK;
-                if (power != POWER_NONE) {
-                    dataIn[0] |= STAT_VTARG;
-                }
             } else {
                 LCD_Position(1, 0);
                 LCD_PrintString("UNK INT COM");
@@ -189,9 +187,6 @@ uint8 parseCommand(uint16 len) {
                     }
                 }
                 dataIn[0] |= STAT_ACK;
-                if (power != POWER_NONE) {
-                    dataIn[0] |= STAT_VTARG;
-                }
             } else {
                 // WRITE operation
                 // START condition
@@ -216,9 +211,6 @@ uint8 parseCommand(uint16 len) {
                     }
                 }
                 dataIn[0] |= STAT_ACK;
-                if (power != POWER_NONE) {
-                    dataIn[0] |= STAT_VTARG;
-                }
             }
         }
     } else {
