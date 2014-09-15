@@ -14,7 +14,7 @@
 #define ENDPOINT_OUT        (0x01u)
 #define ENDPOINT_IN         (0x02u)
 #define DATA_LEN            (0x40u)
-#define MAX_I2C_SIZE        (DATA_LEN-2)
+#define MAX_I2C_SIZE        (DATA_LEN-3)
 
 //  Generic Command
 //
@@ -95,8 +95,10 @@ CYCODE const uint8 version[] = {0, 0, 0, 1, 0x01, 0x23, 0x00, 0xA5};
 
 void stall(uint8 errorCode) {
     LCD_Position(1, 0);
-    LCD_PrintString("ERROR=");
+    LCD_PrintString("ERR=");
     LCD_PrintHexUint8(errorCode);
+    LCD_PrintString(" STA=");
+    LCD_PrintHexUint8(I2CM_MasterStatus());
     for (;;) ;
 }
 
@@ -106,6 +108,8 @@ uint8 parseCommand(uint16 len) {
     uint8 dataOutIndex = 0;
     uint8 control;
     uint8 command;
+    uint8 slaveAddress;
+    uint8 status;
     uint8 errorCode;
     
     dataInIndex = 0;
@@ -124,7 +128,6 @@ uint8 parseCommand(uint16 len) {
         LCD_PrintString("TOO LONG PACKET");
         for (;;) ;
     }
-    command = dataOut[2];
     
     if (control & CTRL_CONFIG) {
         // Configuration command
@@ -132,6 +135,7 @@ uint8 parseCommand(uint16 len) {
         dataIn[0] |= STAT_ACK;
     } else if (control & CTRL_START) {
         if (command & COM_INTERNAL) {
+            command = dataOut[2];
             dataIn[0] |= STAT_VTARG;
             if (command == COM_STATUS) {
                 if (control & CTRL_RW) {
@@ -156,55 +160,54 @@ uint8 parseCommand(uint16 len) {
                 for (;;) ;
             }
         } else {
+            slaveAddress = dataOut[2];
             if (control & CTRL_RW) {
                 // READ operation
-                // START condition
-                errorCode = I2CM_MasterSendStart(dataOut[2], 1);
-                if (errorCode != I2CM_MSTR_NO_ERROR) {
-                    stall(errorCode);
-                }
-                // Body part
-                for (; dataLength > 1; dataLength--) {
-                    dataIn[dataInIndex++] = I2CM_MasterReadByte(1);
-                }
-                // Last byte
-                if (control & CTRL_STOP) {
-                    dataIn[dataInIndex++] = I2CM_MasterReadByte(0);
-                } else {
-                    dataIn[dataInIndex++] = I2CM_MasterReadByte(1);
-                }
-                // STOP condition
-                if (control & CTRL_STOP) {
-                    errorCode = I2CM_MasterSendStop();
-                    if (errorCode != I2CM_MSTR_NO_ERROR) {
+                I2CM_MasterClearStatus();
+                // Start transfer
+                errorCode = I2CM_MasterReadBuf(
+                    slaveAddress,
+                    &dataIn[dataInIndex], dataLength,
+                    I2CM_MODE_COMPLETE_XFER
+                );
+                // Wait for transfer ends
+                while (!((status = I2CM_MasterStatus()) & I2CM_MSTAT_RD_CMPLT)) ;
+                if (status & (~I2CM_MSTAT_RD_CMPLT)) {
+                    // Some error reported
+                    if (status & I2CM_MSTAT_ERR_ADDR_NAK) {
+                        // Return NAK for address NAK
+                    } else {
                         stall(errorCode);
                     }
+                } else {
+                    dataIn[0] |= STAT_ACK;
                 }
-                dataIn[0] |= STAT_ACK;
             } else {
                 // WRITE operation
-                // START condition
-                errorCode = I2CM_MasterSendStart(dataOut[2], 0);
-                if (errorCode != I2CM_MSTR_NO_ERROR) {
-                    stall(errorCode);
-                }
-                // Body part
                 dataOutIndex = 3;
-                for (; dataLength > 0; dataLength--) {
-                    errorCode = I2CM_MasterWriteByte(dataOut[dataOutIndex++]);
-                    dataIn[dataInIndex++] = !errorCode;
-                    if (errorCode != I2CM_MSTR_NO_ERROR) {
+                I2CM_MasterClearStatus();
+                // Start transfer
+                errorCode = I2CM_MasterWriteBuf(
+                    slaveAddress,
+                    &dataOut[dataOutIndex], dataLength,
+                    I2CM_MODE_COMPLETE_XFER
+                );
+                // Wait for transfer ends
+                while (!((status = I2CM_MasterStatus()) & I2CM_MSTAT_WR_CMPLT)) ;
+                if (status & (~I2CM_MSTAT_WR_CMPLT)) {
+                    // Some error reported
+                    if (status & I2CM_MSTAT_ERR_ADDR_NAK) {
+                        // Return NAK for address NAK
+                    } else {
                         stall(errorCode);
                     }
-                }
-                // STOP condition
-                if (control & CTRL_STOP) {
-                    errorCode = I2CM_MasterSendStop();
-                    if (errorCode != I2CM_MSTR_NO_ERROR) {
-                        stall(errorCode);
+                } else {
+                    // Return status for all bytes
+                    for (i = 0; i < dataLength; i++) {
+                        dataIn[dataInIndex++] = 1;
                     }
+                    dataIn[0] |= STAT_ACK;
                 }
-                dataIn[0] |= STAT_ACK;
             }
         }
     } else {
