@@ -129,8 +129,8 @@ uint8 parseCommand(void) {
         i2cSpeed = control & CONFIG_SPEED;
         dataIn[0] |= STAT_ACK;
     } else if (control & CTRL_START) {
+        command = dataOut[2];
         if (command & COM_INTERNAL) {
-            command = dataOut[2];
             dataIn[0] |= STAT_VTARG;
             if (command == COM_STATUS) {
                 if (control & CTRL_RW) {
