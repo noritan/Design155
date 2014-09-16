@@ -155,6 +155,7 @@ uint8 parseCommand(void) {
                 for (;;) ;
             }
         } else {
+            // I2C bus access
             slaveAddress = dataOut[2];
             if (control & CTRL_RW) {
                 // READ operation
@@ -204,6 +205,11 @@ uint8 parseCommand(void) {
                     dataIn[0] |= STAT_ACK;
                 }
             }
+            if (!(control & CTRL_STOP)) {
+                LCD_Position(1, 0);
+                LCD_PrintString("NO STOP");
+                for (;;) ;
+            }        
         }
     } else {
         LCD_Position(1, 0);
